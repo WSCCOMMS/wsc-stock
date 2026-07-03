@@ -170,7 +170,7 @@ body.is-staff .editoronly{display:none !important}
     <div class="jobadd">
       <input type="text" id="jiName" placeholder="Item to order for a job...">
       <input type="number" id="jiQty" min="1" value="1">
-      <select id="jiSup"><option>Commsplus</option><option>UMART</option><option>ILAN</option></select>
+      <input type="text" id="jiSup" list="supList" placeholder="Supplier..." style="flex:0 1 170px;min-width:140px"><datalist id="supList"><option>Commsplus</option><option>UMART</option><option>ILAN</option></datalist>
       <button class="btn" id="jiAdd">Add</button>
     </div>
   </div>
@@ -387,8 +387,10 @@ document.getElementById("jiName").addEventListener("keydown", function(e){ if(e.
 async function addJob(){
   var name=document.getElementById("jiName").value.trim();
   var qty=parseInt(document.getElementById("jiQty").value,10);
-  var sup=document.getElementById("jiSup").value;
-  if(!name || isNaN(qty) || qty<1) return;
+  var sup=document.getElementById("jiSup").value.trim();
+  if(!name || isNaN(qty) || qty<1 || !sup) return;
+  var canon={commsplus:"Commsplus",umart:"UMART",ilan:"ILAN"};
+  sup = canon[sup.toLowerCase()] || (sup.charAt(0).toUpperCase()+sup.slice(1));
   document.getElementById("jiName").value=""; document.getElementById("jiQty").value="1";
   await sb.from("job_items").insert({ item:name, qty:qty, supplier:sup, ordered:false });
   debounceFetch();
