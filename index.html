@@ -102,9 +102,10 @@ body.is-staff .editoronly{display:none !important}
 <div id="login">
   <div class="loginbox">
     <div class="lg2">WSC Stock Register</div>
-    <p>Sign in with your work email. We'll send you a secure link — no password needed.</p>
+    <p>Sign in with your work email and password.</p>
     <input type="email" id="email" placeholder="you@ecocomms.com.au" autocomplete="email">
-    <button class="btn" id="sendlink">Email me a sign-in link</button>
+    <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+    <button class="btn" id="signin">Sign in</button>
     <div id="loginmsg"></div>
   </div>
 </div>
@@ -222,13 +223,16 @@ async function onSignedIn(session){
   await fetchAll();
   subscribe();
 }
-document.getElementById("sendlink").addEventListener("click", async function(){
+document.getElementById("signin").addEventListener("click", async function(){
   var email=document.getElementById("email").value.trim();
-  if(!email){ document.getElementById("loginmsg").textContent="Enter your email first."; return; }
-  var r = await sb.auth.signInWithOtp({ email:email, options:{ emailRedirectTo: location.origin+location.pathname } });
-  document.getElementById("loginmsg").textContent = r.error ? ("Error: "+r.error.message) : "Check your email for the sign-in link.";
+  var pw=document.getElementById("password").value;
+  if(!email || !pw){ document.getElementById("loginmsg").textContent="Enter your email and password."; return; }
+  document.getElementById("loginmsg").textContent="Signing in...";
+  var r = await sb.auth.signInWithPassword({ email:email, password:pw });
+  document.getElementById("loginmsg").textContent = r.error ? "Wrong email or password — try again." : "";
 });
-document.getElementById("email").addEventListener("keydown", function(e){ if(e.key==="Enter") document.getElementById("sendlink").click(); });
+document.getElementById("email").addEventListener("keydown", function(e){ if(e.key==="Enter") document.getElementById("password").focus(); });
+document.getElementById("password").addEventListener("keydown", function(e){ if(e.key==="Enter") document.getElementById("signin").click(); });
 document.getElementById("signout").addEventListener("click", function(){ sb.auth.signOut(); });
 
 /* ---------- DATA ---------- */
