@@ -102,9 +102,10 @@ body.is-staff .editoronly{display:none !important}
 <div id="login">
   <div class="loginbox">
     <div class="lg2">WSC Stock Register</div>
-    <p>Sign in with your work email. We'll send you a secure link — no password needed.</p>
+    <p>Sign in with your work email and password.</p>
     <input type="email" id="email" placeholder="you@ecocomms.com.au" autocomplete="email">
-    <button class="btn" id="sendlink">Email me a sign-in link</button>
+    <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+    <button class="btn" id="signin">Sign in</button>
     <div id="loginmsg"></div>
   </div>
 </div>
@@ -169,23 +170,8 @@ body.is-staff .editoronly{display:none !important}
     <div class="jobadd">
       <input type="text" id="jiName" placeholder="Item to order for a job...">
       <input type="number" id="jiQty" min="1" value="1">
-      <select id="jiSup"><option>Commsplus</option><option>UMART</option><option>ILAN</option></select>
+      <input type="text" id="jiSup" list="supList" placeholder="Supplier..." style="flex:0 1 170px;min-width:140px"><datalist id="supList"><option>Commsplus</option><option>UMART</option><option>ILAN</option></datalist>
       <button class="btn" id="jiAdd">Add</button>
-    </div>
-  </div>
-
-  <div class="card jobcard editoronly" style="margin-top:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:8px 8px 2px">
-      <strong style="color:#0f2d55;font-size:15px">Add a register item</strong>
-      <span style="font-size:12px;color:#8a978f">New stocked product &middot; editor only</span>
-    </div>
-    <div class="jobadd">
-      <input type="text" id="aiName" placeholder="Product name...">
-      <select id="aiSup"><option>Commsplus</option><option>UMART</option><option>ILAN</option></select>
-      <input type="text" id="aiSku" placeholder="SKU" style="flex:none;width:130px">
-      <input type="number" id="aiMin" min="0" value="0" title="Minimum" style="width:78px">
-      <input type="number" id="aiPrice" min="0" step="0.01" placeholder="Price" style="flex:none;width:100px;text-align:right">
-      <button class="btn" id="aiAdd">Add item</button>
     </div>
   </div>
 
@@ -237,13 +223,16 @@ async function onSignedIn(session){
   await fetchAll();
   subscribe();
 }
-document.getElementById("sendlink").addEventListener("click", async function(){
+document.getElementById("signin").addEventListener("click", async function(){
   var email=document.getElementById("email").value.trim();
-  if(!email){ document.getElementById("loginmsg").textContent="Enter your email first."; return; }
-  var r = await sb.auth.signInWithOtp({ email:email, options:{ emailRedirectTo: location.origin+location.pathname } });
-  document.getElementById("loginmsg").textContent = r.error ? ("Error: "+r.error.message) : "Check your email for the sign-in link.";
+  var pw=document.getElementById("password").value;
+  if(!email || !pw){ document.getElementById("loginmsg").textContent="Enter your email and password."; return; }
+  document.getElementById("loginmsg").textContent="Signing in...";
+  var r = await sb.auth.signInWithPassword({ email:email, password:pw });
+  document.getElementById("loginmsg").textContent = r.error ? "Wrong email or password — try again." : "";
 });
-document.getElementById("email").addEventListener("keydown", function(e){ if(e.key==="Enter") document.getElementById("sendlink").click(); });
+document.getElementById("email").addEventListener("keydown", function(e){ if(e.key==="Enter") document.getElementById("password").focus(); });
+document.getElementById("password").addEventListener("keydown", function(e){ if(e.key==="Enter") document.getElementById("signin").click(); });
 document.getElementById("signout").addEventListener("click", function(){ sb.auth.signOut(); });
 
 /* ---------- DATA ---------- */
@@ -398,26 +387,12 @@ document.getElementById("jiName").addEventListener("keydown", function(e){ if(e.
 async function addJob(){
   var name=document.getElementById("jiName").value.trim();
   var qty=parseInt(document.getElementById("jiQty").value,10);
-  var sup=document.getElementById("jiSup").value;
-  if(!name || isNaN(qty) || qty<1) return;
+  var sup=document.getElementById("jiSup").value.trim();
+  if(!name || isNaN(qty) || qty<1 || !sup) return;
+  var canon={commsplus:"Commsplus",umart:"UMART",ilan:"ILAN"};
+  sup = canon[sup.toLowerCase()] || (sup.charAt(0).toUpperCase()+sup.slice(1));
   document.getElementById("jiName").value=""; document.getElementById("jiQty").value="1";
   await sb.from("job_items").insert({ item:name, qty:qty, supplier:sup, ordered:false });
-  debounceFetch();
-}
-
-var aiBtn=document.getElementById("aiAdd");
-if(aiBtn){ aiBtn.addEventListener("click", addItem); document.getElementById("aiName").addEventListener("keydown", function(e){ if(e.key==="Enter") addItem(); }); }
-async function addItem(){
-  if(!canEdit()) return;
-  var name=document.getElementById("aiName").value.trim();
-  if(!name){ return; }
-  var sup=document.getElementById("aiSup").value;
-  var sku=document.getElementById("aiSku").value.trim();
-  var min=parseInt(document.getElementById("aiMin").value,10); if(isNaN(min)) min=0;
-  var price=parseFloat(document.getElementById("aiPrice").value); if(isNaN(price)) price=0;
-  document.getElementById("aiName").value=""; document.getElementById("aiSku").value=""; document.getElementById("aiMin").value="0"; document.getElementById("aiPrice").value="";
-  var res=await sb.from("items").insert({ id:"itm"+Date.now(), item:name, supplier:sup, sku:sku, minimum:min, in_stock:0, sold:0, unit_price:price, price_updated:TODAY, verify:false, note:"", ordered:null, sort:900 });
-  if(res.error){ alert("Could not add item: "+res.error.message); }
   debounceFetch();
 }
 
