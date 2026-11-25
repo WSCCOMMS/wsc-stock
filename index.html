@@ -57,6 +57,7 @@ tr.muted .itemname{color:#a0acba}
 .pill{display:inline-block;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
 .pill.fresh{background:#d7f5e1;color:#146c39}.pill.review{background:#fdeec2;color:#8a5a06}.pill.verify{background:#fcdada;color:#b21f1f;cursor:help}
 .jobtag{display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px;background:#e7eef7;color:#3a5c86;margin-left:6px}
+.jobtag.dem{background:#fdeec2;color:#8a5a06}
 .pdate{font-size:11px;color:#a6b1bf}
 .note{font-size:12px;color:#c2600c;margin-top:3px}
 tr.gh td{background:#0f2d55;color:#fff;font-weight:800;font-size:14px}
@@ -168,11 +169,12 @@ body.is-staff .editoronly{display:none !important}
       <span style="font-size:12px;color:#8a978f">Appears under its supplier above &middot; not tracked as stock</span>
     </div>
     <div class="jobadd">
-      <input type="text" id="jiName" placeholder="Item to order for a job...">
+      <input type="text" id="jiName" list="itemList" placeholder="Item to order for a job..."><datalist id="itemList"></datalist>
       <input type="number" id="jiQty" min="1" value="1">
       <input type="text" id="jiSup" list="supList" placeholder="Supplier..." style="flex:0 1 170px;min-width:140px"><datalist id="supList"><option>Commsplus</option><option>UMART</option><option>ILAN</option></datalist>
       <button class="btn" id="jiAdd">Add</button>
     </div>
+    <div id="jiMsg" style="padding:0 10px 10px;font-size:12.5px;color:#146c39;font-weight:600"></div>
   </div>
 
   <div class="foot" id="foot"></div>
@@ -195,10 +197,11 @@ function canEdit(){ return state.role==="editor"; }
 
 function rec(d){
   var min=+d.minimum||0, have=+d.in_stock||0, sold=+d.sold||0, price=+d.unit_price||0;
-  var order=Math.max(0,min+sold-have);
+  var jobd=+d.job_demand||0;
+  var order=Math.max(0,min+sold+jobd-have);
   var ordered=(d.ordered!=null)?+d.ordered:0;
   var outstanding=ordered>0?0:order;
-  return {id:d.id,item:d.item,supplier:d.supplier,sku:d.sku||"",min:min,have:have,sold:sold,price:price,updated:d.price_updated,verify:d.verify,note:d.note||"",order:order,ordered:ordered,outstanding:outstanding,cost:order*price,outCost:outstanding*price};
+  return {id:d.id,item:d.item,supplier:d.supplier,sku:d.sku||"",min:min,have:have,sold:sold,jobd:jobd,price:price,updated:d.price_updated,verify:d.verify,note:d.note||"",order:order,ordered:ordered,outstanding:outstanding,cost:order*price,outCost:outstanding*price};
 }
 
 /* ---------- AUTH ---------- */
@@ -288,7 +291,7 @@ function rowHtml(r, zi){
   var cls="zebra"+(zi%2)+(r.ordered>0?" ordered":(r.order>0?" needsorder":" muted"));
   var price = canEdit()? '<input class="cellinput price" data-id="'+r.id+'" data-f="price" type="number" min="0" step="0.01" value="'+r.price.toFixed(2)+'">' : '<span class="txtval">'+fmt(r.price)+'</span>';
   return '<tr class="'+cls+'" data-id="'+r.id+'">'
-    +'<td><span class="itemname">'+esc(r.item)+'</span>'+note+'</td>'
+    +'<td><span class="itemname">'+esc(r.item)+'</span>'+(r.jobd>0?' <span class="jobtag dem">+'+r.jobd+' for jobs</span>':'')+note+'</td>'
     +'<td class="sku">'+esc(r.sku||"-")+'</td>'
     +'<td class="num noprint">'+numCell(r.id,"min",r.min)+'</td>'
     +'<td class="num noprint">'+numCell(r.id,"sold",r.sold)+'</td>'
@@ -324,6 +327,8 @@ function render(){
   var allSup=state.items.map(function(d){return d.supplier;}).filter(function(v,i,a){return a.indexOf(v)===i;}).sort();
   if(sup.options.length<=1){ allSup.forEach(function(s){ var o=document.createElement("option");o.value=s;o.textContent=s;sup.appendChild(o); }); }
 
+  var il=document.getElementById("itemList");
+  if(il && il.options.length!==state.items.length){ il.innerHTML=state.items.map(function(d){return '<option value="'+esc(d.item)+'">';}).join(""); }
   var recRows=state.items.map(rec);
   var jobRows=state.jobs.map(function(j){ return {id:j.id,item:j.item,supplier:j.supplier,sku:"",min:0,have:0,sold:0,price:0,updated:TODAY,verify:false,note:"",order:j.qty,ordered:(j.ordered?j.qty:0),outstanding:(j.ordered?0:j.qty),cost:0,outCost:0,isJob:true}; });
   var rows=recRows.concat(jobRows).filter(function(r){
@@ -344,7 +349,7 @@ function render(){
   var tC=rows.reduce(function(s,r){return s+r.outCost;},0), tU=rows.reduce(function(s,r){return s+r.outstanding;},0);
   document.getElementById("tfoot").innerHTML='<tr class="tot"><td colspan="6">GRAND TOTAL &middot; '+rows.length+' items</td><td class="num noprint">'+tU+'</td><td class="noprint"></td><td class="num noprint">'+fmt(tC)+'</td><td class="noprint"></td></tr>';
   document.getElementById("foot").innerHTML = canEdit()
-    ? "To order = Minimum + Sold − In stock (never below 0). Edit the blue cells; Mark ordered → Received updates stock. Everything syncs live."
+    ? "To order = Minimum + Sold + Job needs − In stock (never below 0). Edit the blue cells; Mark ordered → Received updates stock. Everything syncs live."
     : "Live view. You can add job items below; the rest is managed by the account owner.";
   bind();
   kpis(recRows);
@@ -372,7 +377,7 @@ function bind(){
       }
       var r=rec(state.items.filter(function(x){return x.id===id;})[0]);
       if(act==="order"){ updateItem(id,{ordered:r.order}); }
-      else if(act==="recv"){ updateItem(id,{in_stock:r.have+(r.ordered||0), sold:0, ordered:null}); }
+      else if(act==="recv"){ updateItem(id,{in_stock:r.have+(r.ordered||0), sold:0, job_demand:0, ordered:null}); }
     });
   });
 }
@@ -384,6 +389,7 @@ document.getElementById("printBtn").addEventListener("click", function(){ window
 /* ---------- JOB ADD ---------- */
 document.getElementById("jiAdd").addEventListener("click", addJob);
 document.getElementById("jiName").addEventListener("keydown", function(e){ if(e.key==="Enter") addJob(); });
+function jiMsg(t,warn){ var e=document.getElementById("jiMsg"); if(e){ e.style.color=warn?"#8a5a06":"#146c39"; e.textContent=t; clearTimeout(window._jiT); window._jiT=setTimeout(function(){e.textContent="";},8000); } }
 async function addJob(){
   var name=document.getElementById("jiName").value.trim();
   var qty=parseInt(document.getElementById("jiQty").value,10);
@@ -391,8 +397,18 @@ async function addJob(){
   if(!name || isNaN(qty) || qty<1 || !sup) return;
   var canon={commsplus:"Commsplus",umart:"UMART",ilan:"ILAN"};
   sup = canon[sup.toLowerCase()] || (sup.charAt(0).toUpperCase()+sup.slice(1));
+  var nkey=function(x){return String(x||"").toLowerCase().replace(/[^a-z0-9]/g,"");};
+  var match=state.items.filter(function(x){ return x.supplier===sup && (nkey(x.item)===nkey(name) || (x.sku && nkey(x.sku)===nkey(name))); })[0];
   document.getElementById("jiName").value=""; document.getElementById("jiQty").value="1";
-  await sb.from("job_items").insert({ item:name, qty:qty, supplier:sup, ordered:false });
+  if(match){
+    var cur=+match.job_demand||0, tot=cur+qty;
+    match.job_demand=tot;
+    await sb.from("items").update({job_demand:tot}).eq("id",match.id);
+    jiMsg("Added "+qty+" to "+match.item+" \u2014 now "+tot+" needed for jobs. It\u2019s on the stock line above, not a separate one-off.");
+  } else {
+    await sb.from("job_items").insert({ item:name, qty:qty, supplier:sup, ordered:false });
+    jiMsg("Added as a one-off: "+name+" \u00d7 "+qty+".");
+  }
   debounceFetch();
 }
 
